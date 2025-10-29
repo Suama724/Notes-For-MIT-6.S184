@@ -8,10 +8,6 @@
 
 这里的版本是对原版本的修正 , 把里面的一堆自然自语用人类能理解的语言重写了一遍 , 顺便重新收获了许多新想法 .
 
-## 仍存在的问题 :
-- 到底是flow 还是diffusion ? 随机过程能规避什么 ? 
-- Part 2.2
-
 # Part 0 全课程大观
 
 这篇笔记聚焦于两种目前很广泛使用的 Generative AI Algorithms：Denoisiong Diffusion Models 与  Flow Matching , 二者虽然名字相差很大 , 却是本质同源的 .
@@ -63,7 +59,7 @@ PS . 后续推导可以得到 Condition 与 Uncondition 情况下很多公式只
 
 # Part 2 微分方程与随机微分方程
 
-微分方程：
+常微分方程 ( Ordinary Differential Equations , OEDs ) : 
 
 定义一个向量场为 $u_t(x)$ , 定义域为空间中的每个空间与时间 ( 并约束时间为 $\left [0, 1\right]$ 区间 ) , 其为一个向量 $X$ 在 $t$ 时刻的导数 , 同时令 $X$ 在 $x_0$ 处开始运动 , 这样一来 $X$ 作为一个关于 $t$ 的函数 , 在每个 $t$ 的情况就是确定的 , 这也就是确定了一个轨迹 ( trajectory ) . 
 
@@ -72,6 +68,8 @@ PS . 后续推导可以得到 Condition 与 Uncondition 情况下很多公式只
 $\text{Vector fields define ODEs, whose solutions are flows}$ 这句话可以解释三者的关系 . 
 
 而 $\psi_t(x)$ 在以下条件下 , 是可以保证存在且唯一存在的 : $u$ 可微且其导数有界 . ( 且其与其逆函数是连续可导的 ) . 而这个条件在 Machine Learning 中是很容易达到的 .
+
+抽象为最原始的形态 , 即是 $dX_t = u_t(X_t)dt\quad\quad X_0 = x_0$
 
 一个实际例子，可以举 $\psi_t(x_0) = e^{-\theta t}x_0 $ 是 $u_t(x) = -\theta t$ 的 flow
 
@@ -86,9 +84,11 @@ $$X'_{t+h} = X_t + hu_t(X_t)$$ $$X_{t+h} = X_t + \frac{h}{2}(u_t(X_t) + u_{t+h}(
 
 这种通过训练的到的参数构建向量场 , $x$ 从初始分布中用 ODE 随机采样游走停下 , 便是 flow model ( **注意不是flow matching , 这两个不是一个东西** ) , 而目标是让游走终刻得到的 $\psi^\theta_1(X_0) \sim p_{data}$ : 这个演变在训练好的参量下 , 能使得输入的随机初始值在演变终点的结果服从 $p_{data}$
 
-而 SDE 在 ODE 基础上加上了一个 Brownian motion ( 又名 Wiener process , 因此简记其项为$W$ ) . 其定义为 : 
+而 SDE ( Stochastic Differential Equations , 随机微分方程 ) 在 ODE 基础上加上了一个 Brownian motion ( 又名 Wiener process , 因此简记其项为$W$ ) . 其定义为 : 
 
-Brownian motion 属于一种 stochastic process , $W = (W_t)_{0\le t\le 1}$ , $W_0 = 0$ , 其对于时间t的轨迹连续 , 满足 :
+$dX_t = u_t(X_t)dt + \sigma_tdW_t\quad\quad X_0 = x_0$
+
+Brownian motion 属于一种 stochastic process , $W = (W_t)_{0\le t\le 1}$ , $W_0 = 0$ , 其对于时间 $t$ 的轨迹连续 , 满足 :
 1. Normal increments : $W_t-W_s\sim \mathcal{N}(0,(t-s)I_d)\space0\le s\le t$ , 也就是说其增量的方差呈线性增长 .
 2. Independent invrements :  对顺序时间列 $t_i$ , 有 $W_{t_1}-W_{t_0},\dots,W_{t_n}-W_{t_{n-1}}$ 之间相互独立 . 
    
@@ -112,12 +112,59 @@ $dt$ 前系数 ( 这里是 $u_t(X_t)$ ) , 被称为 Drift Coefficient , $dW$前�
 
 因为只有引入新的随机项的差别 , 可以照着 Flow Model 造出来几乎一样的 Diffusion Model
 
-# Part 2.2 不同的随机过程举隅
+# Part 2.2 简单补充介绍些具有名字的存在
+
+由于这里大部分定义只是定下必要的基本形式 , 而大部分具体实现方式是放开的 , 因此在各个部分都有出现有自己名字的方法 . 尤其是 Lab 中初见会比较晕 . 这里以 Lab 代表的分层思路为主干 , 补充说明一下 . 
+
+首先 , 这其中涉及的原始概念有 : 
+- ODE / SDE : 基础方程的组分 . 不同种类的过程需要提供各级的漂移参数与扩散参数
+- Simulator :  离散化演变过程的组件 , 需要提供根据时间刻具体步进的策略 , 称为 method 也无不妥 .  
+- Density : 理想中的目标分布 , 描述它可能的在可解析的情况下能给出 Score Function 等的性质 
+- Sampleable : 理想中的目标分布 , 描述它不一定可解析 , 但应该可采样的性质 . ( 与 Density 相当于一个分布的并列的两大性质 )
+  
+## SDE
+### Brownian Motion
+Brownian Motion 本身也可以被视为一种特殊的 SDE , 有
+$$ dX_t = \sigma dW_t, \quad \quad X_0 = 0.$$
+
+也就是说 Drift Coefficient $u_t$ 为 0
+
+### Langevin Dynamics
+这是在这个背景下真正有应用价值的 SDE 构造策略 .
+$$dX_t = \frac{1}{2} \sigma^2\nabla \log p(X_t) dt + \sigma dW_t.$$
+
+如果没看过后面的章节 , 只需要目前知道有这样一种构造策略 , 然后就可以跳到下一部分 .
+
+但如果已经看过后面的章节 , 会发现它和后面真正用的 $\mathrm{d}X_t = \left [u_t^{target}(X_t) + \frac{\sigma_t^2}{2}\nabla\log p_t(X_t)\right ]\mathrm{d}t + \sigma_t\mathrm{d}W_t$ 非常像 , 这里重点分析下二者差别 . 
+
+最主要差别有两点 : 前者 $p$ 与 $t$ 无关且不含有 $u$ 项 . 第一项特点意味着前者的 $p$ 完全就是目标分布 , 也就是我们还没开始拟合就能知道目标分布的解析式级别的表示 , 这显然不可能 . 但这也暗示了一个信息 : $\frac{1}{2} \sigma^2\nabla \log p(X_t) dt$ 它可以提供一个指向分布的移动量 . 
+
+为了有解析形式 , 我们引入了 Gaussian Probability Path 来想办法提供一个解析式的路 , 而这需要它有一个时间的演进 , $p$ 变成 $p_t$ . 也就是 Score Function 会提供该时刻的一个好的方向驱动 . 而在引入 ODE 的 $u$ 来进一步引导主方向正确 . 这种解释实际上与后面的解释是有不同的 , 或许可以多角度理解 ? 
+
+### Ornstein-Uhlenbeck Process ( OU Process )
+其选择设置漂移系数为常量 , 得到 
+$$ dX_t = -\theta X_t\, dt + \sigma\, dW_t$$ 
+不难发现这个可以将点以指数的趋势推回原点 . 
+
+在读完其余部分 ( 至少理解大概 Lagevin Dynamics 是什么后 ) , 用一下事实加强对感觉 : 
+
+**当取目标分布为恒常 $p(x) = \mathcal{N}(0, \frac{\sigma^2}{2\theta})$ 时 , 其 Langevin Dynamics 就是 OU Process**
+
+这可以通过证明 $-\frac{2\theta}{\sigma^2}x = \nabla \log p(x)$ 得到 . 但这也为上面 " 推回原点 " 提供了更具体的解释 : 当时间趋向无穷时 , 分布会趋向回到一个原点附近的正态分布 . 
+
+## Simulator : 
+### Euler Simulator : 
+应用于 ODE , 更新选择 $$X_{t + h} = X_t + hu_t(X_t)$$ 最直观的选择 . 
+
+### Euler-Maruyama Simulator : 
+应用于 SDE , 更新选择 $$X_{t + h} = X_t + hu_t(X_t) + \sqrt{h} \sigma_t z_t, \quad z_t \sim N(0,I_d)$$ 是 Euler Method 的基础拓展 . 
 
 # Part 3 训练目标函数的寻找与处理
 
 作为学习，需要训练的模型来自 $u$ , 而这里优化选择 MSE , 也就是应该有 :
 $$\mathcal{L}(\theta) = \left \| u_t^\theta(x) - u_t^{target}(x) \right \|^2$$
+
+( 有的地方也会写 $u_t^{target}$ 为 $u_t^{ref}$ )
 
 但现在的问题是：没有现成的 $u_{target}$ , 只有从目标分布里得到的图片。
 
